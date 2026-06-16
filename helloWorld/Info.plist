@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>This app scans for nearby Bluetooth devices to log BLE signal data.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>This app logs GPS location data as part of sensor recording sessions.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app logs GPS location data as part of sensor recording sessions.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>This app logs accelerometer, gyroscope, and pedometer data.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+		<string>location</string>
+	</array>
+</dict>
+</plist>

@@ -7,24 +7,34 @@ struct DiscoveredDevice: Identifiable {
     let name: String
     let rssi: Int
     let identifier: UUID
+    let timestamp: Date
 }
 
 class BluetoothScanner: NSObject, ObservableObject, CBCentralManagerDelegate {
     private var centralManager: CBCentralManager!
     @Published var isScanning = false
     @Published var discoveredDevices: [DiscoveredDevice] = []
+    
+    // CSV logging support
+    private var csvWriter: CSVWriter?
+    private var sessionStartTime: Date?
 
     override init() {
         super.init()
-        // Initialize the CoreBluetooth central manager. The delegate will receive updates on Bluetooth state.
         centralManager = CBCentralManager(delegate: self, queue: nil)
     }
 
-    func startScanning() {
+    func startScanning(sessionDir: URL? = nil, startTime: Date? = nil) {
         if centralManager.state == .poweredOn {
             isScanning = true
             discoveredDevices.removeAll()
-            // Scanning for all devices. nil means any UUID.
+            sessionStartTime = startTime
+            
+            if let dir = sessionDir {
+                let fileURL = dir.appendingPathComponent("BLE_Scan.csv")
+                csvWriter = CSVWriter(fileURL: fileURL, headers: ["timestamp", "seconds_elapsed", "device_name", "mac_address", "rssi_dBm"])
+            }
+            
             centralManager.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
         }
     }
@@ -32,34 +42,42 @@ class BluetoothScanner: NSObject, ObservableObject, CBCentralManagerDelegate {
     func stopScanning() {
         isScanning = false
         centralManager.stopScan()
+        csvWriter?.close()
+        csvWriter = nil
+        sessionStartTime = nil
     }
 
-    // Called when the Bluetooth hardware state changes (e.g. user turns Bluetooth on/off)
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        if central.state == .poweredOn {
-            // Automatically start scanning if powered on
-            startScanning()
-        } else {
-            stopScanning()
-        }
+        // Do not auto-start; let the UI control scanning
     }
 
-    // Called every time the scanner pings a discovery packet from a BLE device
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
         let name = peripheral.name ?? advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? "Unknown Device"
         let uuid = peripheral.identifier
+        let now = Date()
+        
+        // Write to CSV if logging
+        if let writer = csvWriter {
+            let ts = now.timeIntervalSince1970
+            let elapsed = sessionStartTime.map { now.timeIntervalSince($0) } ?? 0
+            writer.writeRow([
+                String(format: "%.6f", ts),
+                String(format: "%.6f", elapsed),
+                name,
+                uuid.uuidString,
+                "\(RSSI.intValue)"
+            ])
+        }
         
         DispatchQueue.main.async {
-            let device = DiscoveredDevice(name: name, rssi: RSSI.intValue, identifier: uuid)
+            let device = DiscoveredDevice(name: name, rssi: RSSI.intValue, identifier: uuid, timestamp: now)
             
-            // Check if we already found this device, update its signal strength (RSSI)
             if let index = self.discoveredDevices.firstIndex(where: { $0.identifier == uuid }) {
                 self.discoveredDevices[index] = device
             } else {
                 self.discoveredDevices.append(device)
             }
             
-            // Sort by strongest signal (closest to 0)
             self.discoveredDevices.sort { $0.rssi > $1.rssi }
         }
     }
